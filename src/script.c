@@ -41,6 +41,9 @@
 #define RETURN	1
 #define BREAK	2
 
+#define NULL_CHARACTER 254
+#define SKIP_NEWLINE   255
+
 struct line {
   char *line;
   int labelcount;
@@ -211,7 +214,7 @@ char *getword(char **s)
              t[len] >= '0'; f++)
           buf_wr(idx, 8 * buf_rd(idx) + t[len++] - '0');
         if (buf_rd(idx) == 0)
-          buf_wr(idx, '@');
+          buf_wr(idx, NULL_CHARACTER);
         idx++;
         len--;
         continue;
@@ -233,7 +236,7 @@ char *getword(char **s)
           buf_wr(idx++, '\f');
           break;
         case 'c':
-          buf_wr(idx++, 255);
+          buf_wr(idx++, SKIP_NEWLINE);
           break;
         default:
           buf_wr(idx++, t[len]);
@@ -437,12 +440,14 @@ int output(char *text, FILE *fp)
       fputc(' ', fp);
     first = 0;
     for(; *w; w++) {
-      if (*w == 255) {
+      if (*w == SKIP_NEWLINE) {
         donl = 0;
         continue;
       }
       if (*w == '\n')
         fputs(newline, fp);
+      else if (*w == NULL_CHARACTER)
+        fputc(0, fp);
       else
         fputc(*w, fp);
     }
