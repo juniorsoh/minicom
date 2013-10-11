@@ -24,6 +24,8 @@
  * 10.07.98 jl  Added the log command
  * 05.04.99 jl  The logfile name should also be passed as a parameter
  * 04.03.2002 jl Treat the ^ character between quotes as control code prefix
+ * 10.09.2013 ts Support sending the null character
+ * 10.10.2013 ts Add the pipedshell command
  */
 
 #ifdef HAVE_CONFIG_H
@@ -447,7 +449,7 @@ int output(char *text, FILE *fp)
       if (*w == '\n')
         fputs(newline, fp);
       else if (*w == NULL_CHARACTER)
-        fputc(0, fp);
+        fputc('\0', fp);
       else
         fputc(*w, fp);
     }
@@ -632,6 +634,42 @@ int expect(char *text)
 int shell(char *text)
 {
   laststatus = system(text);
+  return OK;
+}
+
+/*
+ * Run a command and send its stdout to stdout ( = modem).
+ */
+int pipedshell(char *text)
+{
+  FILE *fp = popen(text, "r");
+  if (fp == NULL) {
+    laststatus = errno;
+    return OK;
+  }
+
+  char received[64];
+  size_t read = 0;
+  while ((read = fread(received, sizeof(char), 64, fp))) {
+#ifdef HAVE_USLEEP
+    /* 200 ms delay. */
+    usleep(200000);
+#endif
+
+    char *sent = received;
+    while (read-- > 0 )
+      fputc(*sent++, stdout);
+
+    fflush(stdout);
+  }
+
+  int status = pclose(fp);
+  if (WIFEXITED(status))
+    laststatus = WEXITSTATUS(status);
+  else if (WIFSIGNALED(status))
+    laststatus = WTERMSIG(status);
+  else
+    laststatus = status;
   return OK;
 }
 
@@ -947,6 +985,7 @@ struct kw {
 } keywords[] = {
   { "expect",	expect },
   { "send",	dosend },
+  { "!<",	pipedshell },
   { "!",	shell },
   { "goto",	dogoto },
   { "gosub",	dogosub },
